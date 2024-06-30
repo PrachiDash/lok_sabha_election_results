@@ -3,36 +3,42 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 url = "https://results.eci.gov.in"
 
-driver = webdriver.Chrome()  
-
-driver.get(url)
+driver = webdriver.Chrome()
 
 try:
-    table = WebDriverWait(driver, 20).until(
-        EC.presence_of_element_located((By.XPATH, '//table[contains(@class, "table-party") or contains(@id, "div1") or contains(@id, "dataTable")]'))
+    driver.get(url)
+    logging.info(f"Accessed URL: {url}")
+
+    # Wait for tables to be present
+    tables = WebDriverWait(driver, 60).until(
+        EC.presence_of_all_elements_located((By.XPATH, '//table[contains(@class, "table-party") or contains(@id, "div1") or contains(@id, "dataTable")]'))
     )
+    logging.info(f"Found {len(tables)} tables on the page.")
 
-    headers = [header.text.strip() for header in table.find_elements(By.TAG_NAME, 'th')]
+    for idx, table in enumerate(tables):
+        headers = [header.text.strip() for header in table.find_elements(By.TAG_NAME, 'th')]
+        
+        rows = []
+        for row in table.find_elements(By.TAG_NAME, 'tr')[1:]:
+            cells = row.find_elements(By.TAG_NAME, 'td')
+            row_data = [cell.text.strip() for cell in cells]
+            rows.append(row_data)
 
-    rows = []
-    for row in table.find_elements(By.TAG_NAME, 'tr')[1:]:  
-        cells = row.find_elements(By.TAG_NAME, 'td')
-        row_data = [cell.text.strip() for cell in cells]
-        rows.append(row_data)
+        # Create DataFrame and save to CSV
+        df = pd.DataFrame(rows, columns=headers)
+        csv_filename = f'election_results_table_{idx+1}.csv'
+        df.to_csv(csv_filename, index=False)
+        logging.info(f"Saved table {idx+1} to {csv_filename}")
 
-    df = pd.DataFrame(rows, columns=headers)
-
-  
-    df.to_csv('election_results.csv', index=False)
-    print("Election results have been saved to 'election_results.csv'")
 except Exception as e:
-    print("An error occurred:", str(e))
-    elements = driver.find_elements(By.TAG_NAME, 'table')
-    print(f"Found {len(elements)} tables on the page.")
-    for i, element in enumerate(elements):
-        print(f"Table {i+1}: {element.get_attribute('outerHTML')[:200]}...")  
+    logging.error(f"An error occurred: {str(e)}")
 finally:
     driver.quit()
+    logging.info("Closed the web driver.")
